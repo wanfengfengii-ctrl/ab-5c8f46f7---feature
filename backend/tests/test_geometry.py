@@ -61,3 +61,54 @@ def test_position_exact():
     x, y = seg.position(Fraction(1, 2))
     # midpoint = (1/8 P1 + 3/8 P2 ...) standard: (0.5, 0.5)
     assert isclose(float(x), 0.5) and isclose(float(y), 0.5)
+
+
+# Segment with a hand-computable curvature rate at t = 0:
+# v(0) = (0, 3), a(0) = (6, -6)  =>  c = -18, c' = 36, S = 9, S' = -36
+# dκ/ds = (2 c' S - 3 c S') / (2 S^3) = -1296 / 1458 = -8/9.
+QUARTER = ((0, 0), (0, 1), (1, 1), (1, 2))
+
+# Two halves of one cubic subdivided at t = 0.5: C-infinity junction.
+HALF_A = ((0, 0), (4, 0), (8, 2), (12, 4))
+HALF_B = ((12, 4), (16, 6), (20, 8), (24, 8))
+
+
+def test_curvature_rate_exact_at_endpoint():
+    seg = Segment(QUARTER)
+    assert seg.curvature_rate(Fraction(0)) == Fraction(-8, 9)
+    # Symmetric segment end has the same value.
+    assert seg.curvature_rate(Fraction(1)) == Fraction(-8, 9)
+
+
+def test_curvature_rate_straight_line_is_zero():
+    seg = Segment(((0, 0), (1, 0), (2, 0), (3, 0)))
+    assert seg.curvature_rate(Fraction(1, 3)) == 0
+    assert seg.curvature_rate(Fraction(1)) == 0
+    assert seg.curvature_rate_stationary_params() == []
+
+
+def test_rate_stationary_params_match_dense_reference():
+    # Independently computed by dense float scan: |dκ/ds| peaks at
+    # 71.667874 near t = 0.480253 (and symmetrically near 0.519747).
+    seg = Segment(HAIRPIN)
+    cands = [Fraction(0), Fraction(1)] + [
+        t for t in seg.curvature_rate_stationary_params() if 0 < t < 1]
+    best_t = max(cands, key=lambda t: abs(seg.curvature_rate(t)))
+    best = abs(seg.curvature_rate(best_t))
+    assert isclose(float(best), 71.66787439031367, abs_tol=1e-7)
+    assert isclose(float(best_t), 0.4802526352, abs_tol=1e-7)
+
+
+def test_rate_stationary_excludes_zero_speed():
+    # The loop has interior cusps; no rate-stationary parameter may
+    # coincide with a zero-speed root (exact GCD removal).
+    seg = Segment(ZERO_LOOP)
+    zero = set(seg.zero_speed_params())
+    stat = set(seg.curvature_rate_stationary_params())
+    assert zero & stat == set()
+
+
+def test_subdivided_cubic_rate_is_continuous():
+    a, b = Segment(HALF_A), Segment(HALF_B)
+    assert a.curvature_rate(Fraction(1)) == \
+        b.curvature_rate(Fraction(0)) == Fraction(-1, 225)

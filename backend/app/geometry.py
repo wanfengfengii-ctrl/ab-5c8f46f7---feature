@@ -2,9 +2,10 @@
 
 Everything is derived from *integer* control points, so every polynomial
 coefficient below (velocity, speed-squared, cross product, squared
-curvature numerator/denominator and the stationary-point polynomial) is an
-exact integer.  Curvature comparisons can therefore be made with exact
-rational arithmetic instead of sampled floats.
+curvature numerator/denominator, the stationary-point polynomial and the
+curvature-rate polynomials) is an exact integer.  Curvature and
+curvature-rate comparisons can therefore be made with exact rational
+arithmetic instead of sampled floats.
 """
 
 from __future__ import annotations
@@ -29,6 +30,12 @@ def poly_mul(a: Sequence[int], b: Sequence[int]) -> List[int]:
 
 def poly_der(p: Sequence[int]) -> List[int]:
     return [i * p[i] for i in range(1, len(p))]
+
+
+def poly_sub(a: Sequence[int], b: Sequence[int]) -> List[int]:
+    n = max(len(a), len(b))
+    return [(a[i] if i < len(a) else 0) - (b[i] if i < len(b) else 0)
+            for i in range(n)]
 
 
 def poly_strip(p: Sequence[int]) -> List[int]:
@@ -87,6 +94,27 @@ class Segment:
         else:
             stationary = []
 
+        # Signed curvature rate with respect to arc length:
+        #     dκ/ds = A(t) / (2 S(t)^3)
+        # with the integer polynomial A = 2 c' S - 3 c S'  (c = v x a signed,
+        # S = |v|^2).  The maxima of (dκ/ds)^2 on [0, 1] occur at the
+        # endpoints or at the roots of G = A' S - 3 A S' (roots of A itself
+        # are minima where the rate vanishes, so they are never needed).
+        if cross and s2:
+            rate_num = poly_strip(poly_sub(
+                [2 * c for c in poly_mul(poly_der(cross), s2)],
+                [3 * c for c in poly_mul(cross, poly_der(s2))],
+            ))
+        else:
+            rate_num = []
+        if rate_num and s2:
+            rate_stat = poly_strip(poly_sub(
+                poly_mul(poly_der(rate_num), s2),
+                [3 * c for c in poly_mul(rate_num, poly_der(s2))],
+            ))
+        else:
+            rate_stat = []
+
         object.__setattr__(self, "cx", cx)
         object.__setattr__(self, "cy", cy)
         object.__setattr__(self, "vx", vx)
@@ -95,6 +123,8 @@ class Segment:
         object.__setattr__(self, "k_num", num)
         object.__setattr__(self, "k_den", den)
         object.__setattr__(self, "stationary", stationary)
+        object.__setattr__(self, "rate_num", rate_num)
+        object.__setattr__(self, "rate_stat", rate_stat)
 
     # -- exact evaluations -------------------------------------------------
 
@@ -115,6 +145,11 @@ class Segment:
         """Exact kappa^2 = |v x a|^2 / |v|^6; undefined at zero velocity."""
         return poly_eval(self.k_num, t) / poly_eval(self.k_den, t)
 
+    def curvature_rate(self, t: Fraction) -> Fraction:
+        """Exact signed dκ/ds = A(t) / (2 S(t)^3); undefined at zero speed."""
+        s = poly_eval(self.speed2, t)
+        return poly_eval(self.rate_num, t) / (2 * s ** 3)
+
     # -- root isolation -----------------------------------------------------
 
     def zero_speed_params(self) -> List[Fraction]:
@@ -134,4 +169,19 @@ class Segment:
             return []
         return isolate_roots_01(
             roots_not_shared(self.stationary, self.speed2)
+        )
+
+    def curvature_rate_stationary_params(self) -> List[Fraction]:
+        """Parameters in [0, 1] where (dκ/ds)^2 is stationary and speed
+        is non-zero.
+
+        The maxima of the squared curvature rate on [0, 1] occur at these
+        parameters or at the endpoints.  Parameters that coincide exactly
+        with a zero-speed root (where the rate is undefined) are removed by
+        exact square-free GCD rather than a numeric proximity test.
+        """
+        if not self.rate_stat or not self.speed2:
+            return []
+        return isolate_roots_01(
+            roots_not_shared(self.rate_stat, self.speed2)
         )

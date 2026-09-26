@@ -12,7 +12,7 @@
       <span class="logo">⚓</span>
       <div>
         <h1>岸桥小车导轨 · 拼接曲线审计</h1>
-        <p>三次贝塞尔样条（2–5 段）· 端点 / 切向量 / 曲率连续性与最大曲率复核</p>
+        <p>三次贝塞尔样条（2–5 段）· 端点 / 切向量 / 曲率连续性与最大曲率复核 · 可选转向变化率复核</p>
       </div>
     </div>
     <div class="health" id="health">
@@ -36,13 +36,18 @@
         <input id="kmax" type="number" step="any" min="0" value="2" />
       </div>
 
+      <div class="field">
+        <label for="krate">统一最大转向变化率 |dκ/ds|<sub>max</sub>（1/长度²，选填）</label>
+        <input id="krate" type="number" step="any" min="0" placeholder="留空则不审计转向变化率" />
+      </div>
+
       <div id="segments"></div>
 
       <div class="actions">
         <button id="auditBtn" class="primary">发起审计</button>
         <button id="sampleBtn" class="ghost" type="button">载入示例曲线</button>
       </div>
-      <p class="hint">控制点按小车<b>行进顺序</b>填写整数坐标；草稿可随时修改后重新审计。</p>
+      <p class="hint">控制点按小车<b>行进顺序</b>填写整数坐标；草稿可随时修改后重新审计，任何编辑都会撤销上方旧结论。填写最大转向变化率后，系统额外按弧长精确复核段内 |dκ/ds| 与拼接处左右连续性。</p>
     </section>
 
     <section class="panel viewer">
