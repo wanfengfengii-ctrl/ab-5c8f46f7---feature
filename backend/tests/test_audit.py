@@ -20,6 +20,16 @@ LOOP = {"points": [[1, 0], [2, 0], [0, 0], [1, 0]]}
 # Straight segment ending at (1,0) with tangent (3,0), junction-compatible.
 TAIL = {"points": [[-2, 0], [-1, 0], [0, 0], [1, 0]]}
 
+# ARC_R with P3 moved to (4,0): same junction position, tangent (3,0) and
+# curvature 2/3 as ARC_L's end, but the turning rate jumps +2/3 -> -2/3.
+ARC_R3 = {"points": [[0, 0], [1, 0], [2, 1], [4, 0]]}
+
+# Exact de Casteljau split of one cubic at t = 1/2 (integer control points):
+# C^infty at the junction, so position/tangent/curvature/turn-rate are all
+# continuous there; segment B carries an interior dκ/ds extremum.
+SPLIT_A = {"points": [[0, 0], [4, 0], [8, 2], [10, 5]]}
+SPLIT_B = {"points": [[10, 5], [12, 8], [12, 12], [8, 16]]}
+
 
 def test_passing_spline_reports_segment_maxima():
     r = audit({"segments": [ARC_L, ARC_R], "max_curvature": 2.0})
@@ -142,3 +152,109 @@ def test_bad_max_curvature():
         audit({"segments": [ARC_L, ARC_R], "max_curvature": 0})
     with pytest.raises(AuditInputError):
         audit({"segments": [ARC_L, ARC_R], "max_curvature": -1.0})
+
+
+# ---- unified maximum turning rate dκ/ds (optional) ------------------------
+
+
+def test_turn_rate_disabled_keeps_legacy_response():
+    legacy = audit({"segments": [ARC_L, ARC_R], "max_curvature": 2.0})
+    assert "max_turn_rate" not in legacy
+    assert all("max_turn_rate" not in s for s in legacy["segments"])
+    # An explicit null is "not filled in": byte-identical response.
+    assert audit({"segments": [ARC_L, ARC_R], "max_curvature": 2.0,
+                  "max_turn_rate": None}) == legacy
+
+
+def test_turn_rate_pass_reports_segment_maxima():
+    r = audit({"segments": [SPLIT_A, SPLIT_B], "max_curvature": 1.0,
+               "max_turn_rate": 0.1})
+    assert r["ok"] is True and r["error"] is None
+    assert r["max_turn_rate"] == 0.1
+    s0, s1 = r["segments"]
+    # Segment A peaks at the junction endpoint (t = 1) ...
+    assert math.isclose(s0["max_turn_rate"], 0.010114803014211, abs_tol=1e-9)
+    assert s0["turn_rate_location"]["t"] == 1.0
+    assert s0["turn_rate_location"]["x"] == 10.0
+    assert s0["turn_rate_location"]["y"] == 5.0
+    # ... segment B at an interior stationary point of dκ/ds.
+    assert math.isclose(s1["max_turn_rate"], 0.013289681654063, abs_tol=1e-9)
+    loc = s1["turn_rate_location"]
+    assert math.isclose(loc["t"], 0.6971813501590987, abs_tol=1e-9)
+    assert set(loc) == {"t", "x", "y"}
+
+
+def test_turn_rate_in_segment_exceeded():
+    # Curvature stays within 2.0, but |dκ/ds| peaks ~0.746 inside segment 1.
+    r = audit({"segments": [ARC_L, ARC_R], "max_curvature": 2.0,
+               "max_turn_rate": 0.6})
+    assert r["ok"] is False
+    e = r["error"]
+    assert e["code"] == "TURN_RATE_EXCEEDED"
+    assert e["segment"] == 0
+    assert math.isclose(e["parameter"], 0.3989525024749128, abs_tol=1e-9)
+    assert math.isclose(e["turn_rate"], 0.7459898642202216, abs_tol=1e-9)
+    assert e["max_turn_rate"] == 0.6
+    assert e["point"] is not None and len(e["point"]) == 2
+    assert "control_points" in e
+    assert r["max_turn_rate"] == 0.6
+
+
+def test_turn_rate_exceeded_at_start_endpoint():
+    # |dκ/ds| at t=0 of ARC_L is exactly 1/2.
+    r = audit({"segments": [ARC_L, ARC_R], "max_curvature": 2.0,
+               "max_turn_rate": 0.4})
+    e = r["error"]
+    assert e["code"] == "TURN_RATE_EXCEEDED"
+    assert e["segment"] == 0 and e["parameter"] == 0.0
+    assert e["turn_rate"] == -0.5
+
+
+def test_turn_rate_junction_discontinuity():
+    # Curvature-continuous splice whose dκ/ds jumps across the junction.
+    r = audit({"segments": [ARC_L, ARC_R3], "max_curvature": 2.0,
+               "max_turn_rate": 100.0})
+    assert r["ok"] is False
+    e = r["error"]
+    assert e["code"] == "TURN_RATE_DISCONTINUITY"
+    assert e["segment"] == 0 and e["parameter"] == 1.0
+    assert math.isclose(e["turn_rate_end"], 2 / 3, abs_tol=1e-12)
+    assert math.isclose(e["turn_rate_start"], -2 / 3, abs_tol=1e-12)
+    assert e["max_turn_rate"] == 100.0
+    assert "control_points" in e and "next_control_points" in e
+
+
+def test_turn_rate_earliest_problem_wins():
+    # Same junction jump as above, but the tighter limit makes the interior
+    # of segment 1 (t ~ 0.399) the earliest problem in travel order.
+    r = audit({"segments": [ARC_L, ARC_R3], "max_curvature": 2.0,
+               "max_turn_rate": 0.6})
+    e = r["error"]
+    assert e["code"] == "TURN_RATE_EXCEEDED"
+    assert e["segment"] == 0
+    assert 0.0 < e["parameter"] < 1.0
+
+
+def test_turn_rate_straight_splice_passes_tiny_limit():
+    straight1 = {"points": [[0, 0], [1, 0], [2, 0], [3, 0]]}
+    straight2 = {"points": [[3, 0], [4, 0], [5, 0], [6, 0]]}
+    r = audit({"segments": [straight1, straight2], "max_curvature": 1.0,
+               "max_turn_rate": 1e-9})
+    assert r["ok"] is True
+    assert all(s["max_turn_rate"] == 0.0 for s in r["segments"])
+
+
+def test_turn_rate_result_stable():
+    payload = {"segments": [SPLIT_A, SPLIT_B], "max_curvature": 1.0,
+               "max_turn_rate": 0.1}
+    assert audit(payload) == audit(payload)
+    payload = {"segments": [ARC_L, ARC_R3], "max_curvature": 2.0,
+               "max_turn_rate": 100.0}
+    assert audit(payload) == audit(payload)
+
+
+def test_bad_max_turn_rate():
+    for bad in (0, -1.0, "x", True, float("nan"), float("inf")):
+        with pytest.raises(AuditInputError):
+            audit({"segments": [ARC_L, ARC_R], "max_curvature": 1.0,
+                   "max_turn_rate": bad})

@@ -56,7 +56,11 @@ function readPayload() {
     });
     return { points: pts };
   });
-  return { segments, max_curvature: Number($("kmax").value) };
+  const payload = { segments, max_curvature: Number($("kmax").value) };
+  // Optional unified maximum turning rate: only sent when filled in.
+  const tr = $("trmax").value.trim();
+  if (tr !== "") payload.max_turn_rate = Number(tr);
+  return payload;
 }
 
 function isValidInteger(v) {
@@ -67,6 +71,10 @@ function validateDraft(payload) {
   if (!Number.isFinite(payload.max_curvature) || payload.max_curvature <= 0) {
     return "最大曲率必须是有限正数。";
   }
+  if ("max_turn_rate" in payload &&
+      (!Number.isFinite(payload.max_turn_rate) || payload.max_turn_rate <= 0)) {
+    return "最大转向变化率必须是有限正数，或留空不启用。";
+  }
   for (const seg of payload.segments) {
     for (const pt of seg.points) {
       if (pt.length !== 2 || !isValidInteger(pt[0]) || !isValidInteger(pt[1])) {
@@ -75,6 +83,13 @@ function validateDraft(payload) {
     }
   }
   return null;
+}
+
+// Any edit to the draft revokes the previous audit conclusion.
+function invalidateResult() {
+  const box = $("result");
+  box.classList.add("hidden");
+  box.innerHTML = "";
 }
 
 // ---------- SVG preview (display only; never used for audit decisions) ----
@@ -88,6 +103,7 @@ function bezPoint(p, t) {
 function drawPreview() {
   const svg = $("preview");
   svg.innerHTML = "";
+  invalidateResult();
   let payload;
   try { payload = readPayload(); } catch { return; }
   const all = payload.segments.flatMap((s) => s.points);
@@ -143,17 +159,22 @@ function fmt(v, digits = 6) {
 }
 
 function renderPass(result) {
+  const hasTR = result.max_turn_rate !== undefined && result.max_turn_rate !== null;
   const rows = result.segments.map((s) => `
     <tr>
       <td>第 ${s.index + 1} 段</td>
       <td class="num">${fmt(s.max_curvature)}</td>
       <td class="num">t = ${fmt(s.location.t)}</td>
       <td class="num">(${fmt(s.location.x)}, ${fmt(s.location.y)})</td>
+      ${hasTR ? `
+      <td class="num">${fmt(s.max_turn_rate)}</td>
+      <td class="num">t = ${fmt(s.turn_rate_location.t)}</td>
+      <td class="num">(${fmt(s.turn_rate_location.x)}, ${fmt(s.turn_rate_location.y)})</td>` : ""}
     </tr>`).join("");
   return `
-    <div class="banner pass">✓ 审计通过：各段拼接连续，曲率均未超过 κ<sub>max</sub> = ${fmt(result.max_curvature)}</div>
+    <div class="banner pass">✓ 审计通过：各段拼接连续，曲率均未超过 κ<sub>max</sub> = ${fmt(result.max_curvature)}${hasTR ? `，转向变化率均未超过 (dκ/ds)<sub>max</sub> = ${fmt(result.max_turn_rate)}` : ""}</div>
     <table>
-      <thead><tr><th>段落</th><th>段内最大曲率</th><th>对应参数</th><th>坐标</th></tr></thead>
+      <thead><tr><th>段落</th><th>段内最大曲率</th><th>对应参数</th><th>坐标</th>${hasTR ? "<th>段内最大转向变化率</th><th>对应参数</th><th>坐标</th>" : ""}</tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -170,6 +191,12 @@ function renderFail(error) {
   if (error.curvature_end !== undefined) {
     push("前段端曲率", fmt(error.curvature_end));
     push("后段端曲率", fmt(error.curvature_start));
+  }
+  if (error.turn_rate !== undefined) push("实际转向变化率", fmt(error.turn_rate));
+  if (error.max_turn_rate !== undefined) push("最大转向变化率", fmt(error.max_turn_rate));
+  if (error.turn_rate_end !== undefined) {
+    push("前段端转向变化率", fmt(error.turn_rate_end));
+    push("后段端转向变化率", fmt(error.turn_rate_start));
   }
   if (error.tangent_end) {
     push("前段端切向量", `(${error.tangent_end.join(", ")})`);
@@ -226,10 +253,13 @@ async function checkHealth() {
 $("auditBtn").addEventListener("click", runAudit);
 $("sampleBtn").addEventListener("click", () => {
   $("kmax").value = SAMPLE.max_curvature;
+  $("trmax").value = "";
   $("segCount").value = SAMPLE.segments.length;
   renderEditors(SAMPLE.segments.length, SAMPLE.segments.map((s) => s.points));
   drawPreview();
 });
+$("kmax").addEventListener("input", invalidateResult);
+$("trmax").addEventListener("input", invalidateResult);
 $("segCount").addEventListener("change", (e) => {
   let n = Math.max(2, Math.min(5, Number(e.target.value) || 2));
   e.target.value = n;

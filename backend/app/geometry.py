@@ -87,6 +87,28 @@ class Segment:
         else:
             stationary = []
 
+        # Signed-curvature turning rate with respect to arc length:
+        #     dκ/ds = (2 C' S - 3 C S') / (2 S^3)
+        # with C = v x a (signed cross) and S = |v|^2.  The numerator
+        # M2 = 2 C' S - 3 C S' is an integer polynomial, and the
+        # stationary parameters of dκ/ds are the roots of the integer
+        # polynomial G = M2' S - 3 M2 S' (derivative of M2 / (2 S^3)).
+        m2 = poly_strip([
+            a - b for a, b in zip(
+                poly_mul([2 * c for c in poly_der(cross)], s2),
+                poly_mul([3 * c for c in cross], poly_der(s2)),
+            )
+        ])
+        if m2 and s2:
+            tr_stationary = poly_strip([
+                a - b for a, b in zip(
+                    poly_mul(poly_der(m2), s2),
+                    poly_mul([3 * c for c in m2], poly_der(s2)),
+                )
+            ])
+        else:
+            tr_stationary = []
+
         object.__setattr__(self, "cx", cx)
         object.__setattr__(self, "cy", cy)
         object.__setattr__(self, "vx", vx)
@@ -95,6 +117,8 @@ class Segment:
         object.__setattr__(self, "k_num", num)
         object.__setattr__(self, "k_den", den)
         object.__setattr__(self, "stationary", stationary)
+        object.__setattr__(self, "tr_num", m2)
+        object.__setattr__(self, "tr_stationary", tr_stationary)
 
     # -- exact evaluations -------------------------------------------------
 
@@ -115,6 +139,11 @@ class Segment:
         """Exact kappa^2 = |v x a|^2 / |v|^6; undefined at zero velocity."""
         return poly_eval(self.k_num, t) / poly_eval(self.k_den, t)
 
+    def turn_rate(self, t: Fraction) -> Fraction:
+        """Exact signed dκ/ds = M2 / (2 S^3); undefined at zero velocity."""
+        s = poly_eval(self.speed2, t)
+        return poly_eval(self.tr_num, t) / (2 * s ** 3)
+
     # -- root isolation -----------------------------------------------------
 
     def zero_speed_params(self) -> List[Fraction]:
@@ -134,4 +163,17 @@ class Segment:
             return []
         return isolate_roots_01(
             roots_not_shared(self.stationary, self.speed2)
+        )
+
+    def turn_rate_stationary_params(self) -> List[Fraction]:
+        """Parameters in [0, 1] with d/dt(dκ/ds) = 0 and non-zero speed.
+
+        Zero-speed roots (where the turning rate is undefined) are removed
+        by the same exact square-free GCD as the curvature stationary
+        parameters, never by sampling or proximity tests.
+        """
+        if not self.tr_stationary or not self.speed2:
+            return []
+        return isolate_roots_01(
+            roots_not_shared(self.tr_stationary, self.speed2)
         )

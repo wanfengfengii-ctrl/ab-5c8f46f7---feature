@@ -61,3 +61,47 @@ def test_position_exact():
     x, y = seg.position(Fraction(1, 2))
     # midpoint = (1/8 P1 + 3/8 P2 ...) standard: (0.5, 0.5)
     assert isclose(float(x), 0.5) and isclose(float(y), 0.5)
+
+
+# ---- signed-curvature turning rate dκ/ds ----------------------------------
+
+ARC_L = ((-3, 0), (-2, 1), (-1, 0), (0, 0))
+
+
+def test_turn_rate_straight_segment_is_zero():
+    seg = Segment(((0, 0), (1, 0), (2, 0), (3, 0)))
+    assert seg.turn_rate(Fraction(0)) == 0
+    assert seg.turn_rate(Fraction(1, 2)) == 0
+    assert seg.turn_rate(Fraction(1)) == 0
+    assert seg.turn_rate_stationary_params() == []
+
+
+def test_turn_rate_endpoint_values_exact():
+    seg = Segment(ARC_L)
+    assert seg.turn_rate(Fraction(0)) == Fraction(-1, 2)
+    assert seg.turn_rate(Fraction(1)) == Fraction(2, 3)
+
+
+def test_turn_rate_extremum_matches_dense_reference():
+    # Independently computed by dense float scan: |dκ/ds| peaks ~0.745990
+    # near t = 0.3990 for ARC_L.
+    seg = Segment(ARC_L)
+    best = 0.0
+    best_t = None
+    for t in [Fraction(0), Fraction(1)] + seg.turn_rate_stationary_params():
+        if seg.speed_squared(t) <= 0:
+            continue
+        r = abs(float(seg.turn_rate(t)))
+        if r > best:
+            best, best_t = r, float(t)
+    assert isclose(best, 0.7459898642202216, abs_tol=1e-7)
+    assert isclose(best_t, 0.3989525024749128, abs_tol=1e-8)
+
+
+def test_turn_rate_stationary_excludes_zero_speed():
+    # The loop has interior cusp(s); no turning-rate stationary parameter
+    # may coincide with a zero-speed root (exact GCD removal).
+    seg = Segment(ZERO_LOOP)
+    zero = set(seg.zero_speed_params())
+    stat = set(seg.turn_rate_stationary_params())
+    assert zero & stat == set()
