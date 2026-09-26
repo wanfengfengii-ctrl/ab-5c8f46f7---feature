@@ -1,0 +1,141 @@
+:root {
+  --bg: #0e1726;
+  --panel: #16233a;
+  --panel-2: #1d2d49;
+  --border: #2a3f63;
+  --text: #e6edf7;
+  --muted: #93a6c4;
+  --accent: #4da3ff;
+  --ok: #2ecc71;
+  --err: #ff5f6d;
+  --warn: #ffb84d;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px;
+  background: linear-gradient(90deg, #13233c, #16233a);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand { display: flex; align-items: center; gap: 14px; }
+.logo { font-size: 30px; }
+.brand h1 { margin: 0; font-size: 19px; letter-spacing: 0.5px; }
+.brand p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); }
+
+.health { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--warn); display: inline-block; }
+.dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.dot.bad { background: var(--err); }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(380px, 460px) 1fr;
+  gap: 18px;
+  padding: 18px 24px;
+}
+@media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.panel-head h2 { margin: 0; font-size: 15.5px; }
+
+.field { margin-bottom: 12px; }
+.field label, .seg-count label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 5px; }
+
+input[type="number"] {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+input[type="number"]:focus { outline: none; border-color: var(--accent); }
+.seg-count input { width: 72px; }
+
+.segment {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: var(--panel-2);
+}
+.segment h3 { margin: 0 0 8px; font-size: 13px; color: var(--accent); }
+.pt-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pt { display: flex; flex-direction: column; gap: 4px; }
+.pt span { font-size: 11px; color: var(--muted); }
+.pt input { padding: 6px 7px; font-size: 13px; }
+
+.actions { display: flex; gap: 10px; margin-top: 14px; }
+button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 14px;
+  cursor: pointer;
+}
+button.primary { background: var(--accent); color: #08131f; font-weight: 600; flex: 1; }
+button.primary:hover { filter: brightness(1.08); }
+button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+button.ghost:hover { color: var(--text); border-color: var(--accent); }
+
+.hint { font-size: 12px; color: var(--muted); margin: 10px 0 0; line-height: 1.55; }
+
+#preview { width: 100%; height: 360px; background: #0b1422; border-radius: 10px; border: 1px solid var(--border); }
+
+.result { margin-top: 14px; }
+.hidden { display: none; }
+
+.banner {
+  border-radius: 9px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.banner.pass { background: rgba(46,204,113,.12); border: 1px solid var(--ok); color: var(--ok); }
+.banner.fail { background: rgba(255,95,109,.12); border: 1px solid var(--err); color: var(--err); }
+
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+td.num { font-variant-numeric: tabular-nums; }
+
+.detail {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--err);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.detail code {
+  background: #0d1726;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.detail .row { display: flex; gap: 8px; }
+.detail .row .k { color: var(--muted); min-width: 88px; }

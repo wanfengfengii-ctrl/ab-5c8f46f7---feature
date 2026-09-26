@@ -1,0 +1,63 @@
+services:
+  api:
+    build:
+      context: ./backend
+    image: quay-crane-audit-api:latest
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: "1"
+    ports:
+      # Direct API access; host port configurable via API_PORT.
+      - "${API_PORT:-8001}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request,sys; r=urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3); sys.exit(0 if json.load(r)['status']=='ok' else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  web:
+    build:
+      context: ./web
+    image: quay-crane-audit-web:latest
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      # Browser entry point; host port configurable via WEB_PORT.
+      - "${WEB_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/index.html"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+  # One-shot pipeline: image build (via `compose up --build`) + code tests +
+  # business smoke test against the running audit API.  Its process exit
+  # code is the verdict: 0 pass, non-zero fail.
+  verify:
+    build:
+      context: ./backend
+    image: quay-crane-audit-api:latest
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    environment:
+      API_URL: http://api:8000
+      WEB_URL: http://web:80
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        echo "==> [1/3] build completed (images assembled by compose)"
+        echo "==> [2/3] running unit/integration tests"
+        python -m pytest -q
+        echo "==> [3/3] running audit API business smoke"
+        python scripts/smoke.py
+        echo "==> verify OK"
+    restart: "no"
+    profiles: ["verify"]

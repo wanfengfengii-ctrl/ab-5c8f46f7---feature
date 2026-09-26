@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>岸桥小车导轨拼接曲线审计</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">⚓</span>
+      <div>
+        <h1>岸桥小车导轨 · 拼接曲线审计</h1>
+        <p>三次贝塞尔样条（2–5 段）· 端点 / 切向量 / 曲率连续性与最大曲率复核</p>
+      </div>
+    </div>
+    <div class="health" id="health">
+      <span class="dot" id="healthDot"></span>
+      <span id="healthText">正在连接审计服务…</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel editor">
+      <div class="panel-head">
+        <h2>草稿录入</h2>
+        <div class="seg-count">
+          <label for="segCount">段数</label>
+          <input id="segCount" type="number" min="2" max="5" value="2" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="kmax">统一最大曲率 κ<sub>max</sub>（1/长度）</label>
+        <input id="kmax" type="number" step="any" min="0" value="2" />
+      </div>
+
+      <div id="segments"></div>
+
+      <div class="actions">
+        <button id="auditBtn" class="primary">发起审计</button>
+        <button id="sampleBtn" class="ghost" type="button">载入示例曲线</button>
+      </div>
+      <p class="hint">控制点按小车<b>行进顺序</b>填写整数坐标；草稿可随时修改后重新审计。</p>
+    </section>
+
+    <section class="panel viewer">
+      <div class="panel-head"><h2>曲线预览</h2></div>
+      <svg id="preview" viewBox="0 0 640 420" preserveAspectRatio="xMidYMid meet"></svg>
+      <p class="hint">图中折线为控制多边形，平滑线为贝塞尔曲线（仅示意，判定以服务端精确根隔离为准）。</p>
+
+      <div id="result" class="result hidden"></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
